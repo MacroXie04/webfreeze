@@ -1,0 +1,26 @@
+[project]
+name = "webfreeze"
+version = "0.1.0"
+description = "Freeze any webpage into a fully self-contained single HTML file"
+readme = "README.md"
+authors = [
+    { name = "Gemini CLI", email = "gemini-cli@example.com" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.0.0",
+    "requests>=2.25.0",
+    "beautifulsoup4>=4.9.0",
+    "playwright>=1.30.0",
+]
+
+[project.scripts]
+webfreeze = "webfreeze.cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
