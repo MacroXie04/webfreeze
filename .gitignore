@@ -42,5 +42,12 @@ playwright-report/
 blob-report/
 playwright/.local-browsers
 
+# IDE
+.idea/
+.vscode/
+
+# Node
+node_modules/
+
 # OS
 .DS_Store
