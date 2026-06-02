@@ -1,4 +1,4 @@
-export type JsFidelity = "off" | "css";
+export type JsFidelity = "off" | "css" | "css+js";
 
 interface Props {
   jsFidelity: JsFidelity;
@@ -17,6 +17,7 @@ export function OptionsPanel({ jsFidelity, disabled, onChange }: Props) {
       >
         <option value="off">off — strip JS</option>
         <option value="css">css — convert to CSS</option>
+        <option value="css+js">css+js — keep JS (may need network)</option>
       </select>
     </label>
   );

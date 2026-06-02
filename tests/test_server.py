@@ -177,3 +177,25 @@ def test_freeze_css_fidelity_converts_disclosure(monkeypatch):
     assert "Panel body" in html
     assert "drives the toggle" not in html  # JS stripped after CSS conversion
     assert any(w["type"] == "disclosure" for w in body["report"]["widgets"])
+
+
+def test_freeze_css_js_keeps_js_and_embeds_report(monkeypatch):
+    client, data = _client_with_session(monkeypatch, "<html><body></body></html>")
+    dom = (
+        "<!DOCTYPE html><html><head><title>T</title></head><body>"
+        "<div>content</div><script>window.__x = 1;</script></body></html>"
+    )
+    resp = client.post(
+        "/api/freeze",
+        json={
+            "sessionId": data["sessionId"],
+            "keep": "selection",
+            "domHtml": dom,
+            "options": {"inlineImages": False, "jsFidelity": "css+js"},
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "window.__x = 1;" in body["html"]  # JS kept
+    assert body["report"]["keptScripts"] >= 1
+    assert "webfreeze fidelity report" in body["html"]  # report comment embedded (Q3)

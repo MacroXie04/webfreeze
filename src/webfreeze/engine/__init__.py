@@ -1,5 +1,11 @@
 from .core import FetchOpts, render_or_fetch
-from .jsfidelity import FidelityReport, WidgetReport, transform_js_fidelity
+from .jsfidelity import (
+    FidelityReport,
+    WidgetReport,
+    embed_report_comment,
+    inline_external_scripts,
+    transform_js_fidelity,
+)
 from .prune import PruneOptions, prune
 
 __all__ = [
@@ -10,4 +16,6 @@ __all__ = [
     "FidelityReport",
     "WidgetReport",
     "transform_js_fidelity",
+    "inline_external_scripts",
+    "embed_report_comment",
 ]

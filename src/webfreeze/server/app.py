@@ -19,12 +19,14 @@ from ..engine import (
     FetchOpts,
     FidelityReport,
     PruneOptions,
+    embed_report_comment,
+    inline_external_scripts,
     prune,
     render_or_fetch,
     transform_js_fidelity,
 )
 from ..inliner import Inliner
-from ..utils import dumps_html
+from ..utils import dumps_html, neutralize_scripts
 from .preview import proxy_url, rewrite_for_preview, unrewrite_proxy_urls
 from .session import Session, SessionStore
 
@@ -61,20 +63,6 @@ def _version() -> str:
 def _origin(url: str) -> str:
     parts = urlsplit(url)
     return f"{parts.scheme}://{parts.netloc}" if parts.scheme else ""
-
-
-def _neutralize_scripts(soup: BeautifulSoup) -> None:
-    """Strip scripts / on* handlers / <noscript> — the CLI's default export shape.
-
-    Used when jsFidelity == "off". P4 unifies this with RenderedFetcher's policy.
-    """
-    for script in soup.find_all("script"):
-        script.decompose()
-    for tag in soup.find_all(True):
-        for attr in [a for a in list(tag.attrs) if a.lower().startswith("on")]:
-            del tag[attr]
-    for noscript in soup.find_all("noscript"):
-        noscript.decompose()
 
 
 def create_app(store: Optional[SessionStore] = None) -> FastAPI:
@@ -197,16 +185,23 @@ def create_app(store: Optional[SessionStore] = None) -> FastAPI:
             else FidelityReport()
         )
 
-        # Strip JS unless explicitly keeping it (css+js Tier-2 lands in P4).
-        if fidelity != "css+js":
-            _neutralize_scripts(soup)
+        if fidelity == "css+js":
+            # Tier-2: keep all JS, inline external <script src>, label honestly.
+            inline_external_scripts(soup, session.cache, session.base_url, report)
+        else:
+            neutralize_scripts(soup, "strip_all")
 
         Inliner(session.cache, inline_images=req.options.inlineImages).process_soup(
             soup, session.base_url
         )
-        html = dumps_html(soup)
+
         report.kept_scripts = len(soup.find_all("script"))
+        html = dumps_html(soup)
         report.size_kb = len(html.encode("utf-8")) // 1024
+        # Q3: embed the report as an HTML comment so exports are self-auditing.
+        if report.widgets or report.kept_scripts:
+            embed_report_comment(soup, report)
+            html = dumps_html(soup)
         return {"html": html, "report": report.to_dict()}
 
     return app

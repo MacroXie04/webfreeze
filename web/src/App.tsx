@@ -143,6 +143,12 @@ export default function App() {
       </div>
 
       {error && <div className="banner banner--error">{error}</div>}
+      {jsFidelity === "css+js" && (
+        <div className="banner banner--warn">
+          Keeping JavaScript: kept scripts may depend on network or bundling and might
+          not run fully offline. Only export JS from sites you trust.
+        </div>
+      )}
       {session?.warnings?.map((w, i) => (
         <div className="banner banner--warn" key={i}>
           {w}

@@ -1,6 +1,14 @@
+from unittest.mock import MagicMock
+
 from bs4 import BeautifulSoup
 
-from webfreeze.engine import transform_js_fidelity
+from webfreeze.cache import ResourceCache
+from webfreeze.engine import (
+    FidelityReport,
+    embed_report_comment,
+    inline_external_scripts,
+    transform_js_fidelity,
+)
 
 
 def _soup(html):
@@ -83,3 +91,41 @@ def test_tabs_default_first_checked_when_none_selected():
     transform_js_fidelity(soup, "css")
     radios = soup.find_all("input", {"type": "radio"})
     assert radios[0].has_attr("checked")
+
+
+def test_inline_external_scripts_keeps_and_inlines():
+    soup = _soup(
+        '<html><body><script src="/app.js"></script>'
+        "<script>inlineCode()</script></body></html>"
+    )
+    cache = MagicMock(spec=ResourceCache)
+    cache.fetch.return_value = ("application/javascript", b"console.log('external')")
+    report = FidelityReport()
+    inline_external_scripts(soup, cache, "https://example.com/", report)
+
+    scripts = soup.find_all("script")
+    assert len(scripts) == 2
+    assert all(not s.get("src") for s in scripts)  # external src inlined + removed
+    assert any("console.log('external')" in (s.string or "") for s in scripts)
+    assert report.kept_scripts == 2
+    assert all(w.strategy == "kept-js" for w in report.widgets)
+
+
+def test_inline_external_scripts_survives_fetch_failure():
+    soup = _soup('<html><body><script src="/x.js"></script></body></html>')
+    cache = MagicMock(spec=ResourceCache)
+    cache.fetch.side_effect = RuntimeError("boom")
+    report = FidelityReport()
+    inline_external_scripts(soup, cache, "https://example.com/", report)
+    assert report.kept_scripts == 1
+    assert "requires network" in report.widgets[0].note
+
+
+def test_embed_report_comment():
+    soup = _soup("<html><head></head><body></body></html>")
+    report = FidelityReport()
+    report.kept_scripts = 2
+    embed_report_comment(soup, report)
+    out = str(soup)
+    assert "webfreeze fidelity report" in out
+    assert '"keptScripts":2' in out

@@ -11,10 +11,13 @@ Initial open/active state is taken from the captured (post-interaction) DOM.
 Everything else is left as-is; Tier-2 keep-JS (P4) is the fallback.
 """
 
+import json
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, Comment, Tag
+
+from ..utils import resolve_url
 
 
 @dataclass
@@ -176,3 +179,37 @@ def transform_js_fidelity(
     _convert_tabs(soup, report, [0])
     _convert_disclosures(soup, report)
     return report
+
+
+def inline_external_scripts(
+    soup: BeautifulSoup, cache, base_url: str, report: FidelityReport
+) -> None:
+    """Tier-2 keep-JS: retain all scripts and inline external <script src> via the
+    cache so they are reachable offline, with honest report rows.
+
+    Pragmatic v1 (per plan): we keep broadly rather than auto-attributing a script
+    to a widget (unreliable) and label clearly that kept JS may not run offline.
+    """
+    for script in soup.find_all("script"):
+        src = script.get("src")
+        if src:
+            try:
+                _, content = cache.fetch(resolve_url(base_url, src))
+                script.string = content.decode("utf-8", errors="replace")
+                del script["src"]
+                note = "inlined external script; may require network/bundling, may not run offline"
+            except Exception:
+                note = "external script kept (fetch failed); requires network"
+        else:
+            note = "inline script kept; may require network/bundling, may not run offline"
+        report.widgets.append(WidgetReport(_selector(script), "js", "kept-js", 0.3, note))
+    report.kept_scripts = len(soup.find_all("script"))
+
+
+def embed_report_comment(soup: BeautifulSoup, report: FidelityReport) -> None:
+    """Embed the fidelity report as an HTML comment so exports are self-auditing."""
+    payload = json.dumps(report.to_dict(), separators=(",", ":"))
+    # '--' is illegal inside an HTML comment; defuse any that slip in via selectors.
+    text = " webfreeze fidelity report: " + payload.replace("--", "- -") + " "
+    target = soup.head or soup.body or soup
+    target.insert(0, Comment(text))

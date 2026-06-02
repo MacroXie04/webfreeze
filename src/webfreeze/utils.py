@@ -48,6 +48,26 @@ def save_html(soup: BeautifulSoup, file_path: str) -> None:
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(dumps_html(soup))
 
+def neutralize_scripts(soup: BeautifulSoup, policy: str = "strip_all") -> None:
+    """Remove JavaScript from a document according to `policy` (in place).
+
+    strip_all    -> drop every <script>, on* handler, and <noscript> (default)
+    keep_flagged -> keep <script data-wf-keep-script>, drop the rest; still
+                    strips on* handlers and <noscript>
+    keep_all     -> no-op (preserve all JS)
+    """
+    if policy == "keep_all":
+        return
+    for script in soup.find_all("script"):
+        if policy == "keep_flagged" and script.has_attr("data-wf-keep-script"):
+            continue
+        script.decompose()
+    for tag in soup.find_all(True):
+        for attr in [a for a in list(tag.attrs) if a.lower().startswith("on")]:
+            del tag[attr]
+    for noscript in soup.find_all("noscript"):
+        noscript.decompose()
+
 def log_info(msg: str) -> None:
     logger.info(msg)
     print(f"[*] {msg}", file=sys.stderr)

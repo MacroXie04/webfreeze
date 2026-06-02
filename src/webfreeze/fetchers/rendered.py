@@ -3,7 +3,7 @@ from typing import Optional
 
 from playwright.sync_api import sync_playwright
 
-from ..utils import log_info, log_warn
+from ..utils import log_info, log_warn, neutralize_scripts
 from .base import BaseFetcher
 
 class RenderedFetcher(BaseFetcher):
@@ -88,26 +88,11 @@ class RenderedFetcher(BaseFetcher):
                             else:
                                 soup.insert(0, style_tag)
 
-                # Neutralize scripts based on the configured policy.
-                #   strip_all    : remove all <script>, on* handlers, <noscript> (default)
-                #   keep_flagged : behaves like strip_all until P4 wires the marker
-                #   keep_all     : keep everything (interactive preview)
-                if self.script_policy in ("strip_all", "keep_flagged"):
-                    # TODO P4: honor data-wf-keep-script when script_policy == "keep_flagged"
+                # Neutralize scripts according to the configured policy
+                # (strip_all | keep_flagged | keep_all).
+                if self.script_policy != "keep_all":
                     log_info("Neutralizing scripts for static snapshot...")
-                    for script in soup.find_all("script"):
-                        script.decompose()
-                    
-                    # Also strip inline event handlers
-                    for tag in soup.find_all(True):
-                        attrs = list(tag.attrs.keys())
-                        for attr in attrs:
-                            if attr.lower().startswith("on"):
-                                del tag[attr]
-                    
-                    # Strip <noscript> tags
-                    for noscript in soup.find_all("noscript"):
-                        noscript.decompose()
+                neutralize_scripts(soup, self.script_policy)
 
                 return str(soup)
 
