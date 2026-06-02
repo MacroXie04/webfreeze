@@ -22,6 +22,38 @@ _SKIP_PREFIXES = ("#", "data:", "javascript:", "mailto:", "tel:", "blob:")
 # P5 wires package-data so it ships in the wheel too.
 PICKER_BOOTSTRAP = (Path(__file__).parent / "picker.js").read_text(encoding="utf-8")
 
+# Runtime fetch/XHR shim (P3): routes requests fired during interaction through
+# /proxy. Relative URLs resolve against the ORIGINAL page base, not the preview
+# origin. Best-effort (per plan R1/N2). Placeholders filled per session.
+_RUNTIME_SHIM = """(function(){
+  if (window.__wfShim) return; window.__wfShim = true;
+  var SID = "__WF_SID__", BASE = "__WF_BASE__";
+  function prox(u){
+    try { var a = new URL(u, BASE);
+      if (a.protocol === "http:" || a.protocol === "https:")
+        return "/proxy?url=" + encodeURIComponent(a.href) + "&sid=" + SID;
+    } catch (e) {}
+    return u;
+  }
+  var of = window.fetch;
+  if (of) window.fetch = function(input, init){
+    try {
+      if (typeof input === "string") input = prox(input);
+      else if (input && input.url) input = new Request(prox(input.url), input);
+    } catch (e) {}
+    return of.call(this, input, init);
+  };
+  var ox = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(m, u){
+    try { u = prox(u); } catch (e) {}
+    return ox.apply(this, [m, u].concat([].slice.call(arguments, 2)));
+  };
+})();"""
+
+
+def _runtime_shim(sid: str, base_url: str) -> str:
+    return _RUNTIME_SHIM.replace("__WF_SID__", sid).replace("__WF_BASE__", base_url)
+
 
 def proxy_url(absolute_url: str, sid: str) -> str:
     return f"/proxy?url={quote(absolute_url, safe='')}&sid={sid}"
@@ -72,7 +104,15 @@ def rewrite_for_preview(
         if style.string:
             style.string = inliner.inline_css(style.string, base_url, url_target=to_proxy)
 
-    # 4) Inject the picker bootstrap as the last <body> child.
+    # 4) Inject the runtime fetch/XHR shim FIRST (before the page's own scripts
+    #    run) so SPA requests during interaction route through /proxy.
+    shim = soup.new_tag("script")
+    shim["data-wf-ui"] = "shim"
+    shim.string = _runtime_shim(sid, base_url)
+    head = soup.head or soup.html or soup
+    head.insert(0, shim)
+
+    # 5) Inject the picker bootstrap as the last <body> child.
     bootstrap = soup.new_tag("script")
     bootstrap["data-wf-ui"] = "bootstrap"
     bootstrap.string = PICKER_BOOTSTRAP

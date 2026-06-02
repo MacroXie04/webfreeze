@@ -12,10 +12,18 @@ export interface SessionResponse {
   warnings: string[];
 }
 
+export interface WidgetReport {
+  selector: string;
+  type: string;
+  strategy: string;
+  confidence: number;
+  note: string;
+}
+
 export interface FreezeReport {
   sizeKB: number;
   keptScripts: number;
-  widgets: unknown[];
+  widgets: WidgetReport[];
 }
 
 export interface FreezeResponse {

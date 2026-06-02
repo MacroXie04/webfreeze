@@ -149,3 +149,31 @@ def test_freeze_selection_prunes(monkeypatch):
     assert "KEEP" in html
     assert "DROP" not in html
     assert "data-wf-keep" not in html
+
+
+def test_freeze_css_fidelity_converts_disclosure(monkeypatch):
+    client, data = _client_with_session(monkeypatch, "<html><body></body></html>")
+    dom = (
+        "<!DOCTYPE html><html><head><title>T</title></head><body>"
+        '<button aria-expanded="true" aria-controls="p">Toggle</button>'
+        '<div id="p">Panel body</div>'
+        "<script>console.log('drives the toggle')</script>"
+        "</body></html>"
+    )
+    # No data-wf-keep markers -> prune is a no-op (whole-DOM), then CSS conversion runs.
+    resp = client.post(
+        "/api/freeze",
+        json={
+            "sessionId": data["sessionId"],
+            "keep": "selection",
+            "domHtml": dom,
+            "options": {"inlineImages": False, "jsFidelity": "css"},
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    html = body["html"]
+    assert "<details" in html and "open" in html
+    assert "Panel body" in html
+    assert "drives the toggle" not in html  # JS stripped after CSS conversion
+    assert any(w["type"] == "disclosure" for w in body["report"]["widgets"])

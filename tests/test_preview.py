@@ -48,6 +48,16 @@ def test_injects_bootstrap():
     assert soup.find("script", attrs={"data-wf-ui": "bootstrap"}) is not None
 
 
+def test_injects_runtime_shim_first_in_head():
+    soup = _soup("<html><head></head><body><p>x</p></body></html>")
+    rewrite_for_preview(soup, "https://example.com/", "SID9", MagicMock())
+    shim = soup.find("script", attrs={"data-wf-ui": "shim"})
+    assert shim is not None
+    assert "SID9" in shim.string and "https://example.com/" in shim.string
+    # Must run before the page's own scripts.
+    assert soup.head.find("script") is shim
+
+
 def test_unrewrite_roundtrip():
     soup = _soup(
         "<html><body><img src='/logo.png'>"

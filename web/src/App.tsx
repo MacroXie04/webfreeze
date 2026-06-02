@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { UrlBar } from "./components/UrlBar";
 import { PreviewFrame } from "./components/PreviewFrame";
 import { PickerToolbar } from "./components/PickerToolbar";
+import { OptionsPanel, type JsFidelity } from "./components/OptionsPanel";
+import { JsFidelityReport } from "./components/JsFidelityReport";
 import { ExportButton } from "./components/ExportButton";
 import {
   createSession,
@@ -24,6 +26,7 @@ export default function App() {
   const [report, setReport] = useState<FreezeReport | null>(null);
   const [pickMode, setPickMode] = useState(false);
   const [selection, setSelection] = useState<Selection>({ count: 0, breadcrumb: "" });
+  const [jsFidelity, setJsFidelity] = useState<JsFidelity>("off");
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const pendingDom = useRef<((html: string) => void) | null>(null);
@@ -96,13 +99,13 @@ export default function App() {
         res = await freeze(
           session.sessionId,
           "selection",
-          { inlineImages: true, jsFidelity: "off", stripUnselectedSiblings: true },
+          { inlineImages: true, jsFidelity, stripUnselectedSiblings: true },
           domHtml,
         );
       } else {
         res = await freeze(session.sessionId, "whole", {
           inlineImages: true,
-          jsFidelity: "off",
+          jsFidelity,
         });
       }
       setReport(res.report);
@@ -133,6 +136,7 @@ export default function App() {
           onChild={() => postToFrame("wf-select-child")}
           onClear={() => postToFrame("wf-clear")}
         />
+        <OptionsPanel jsFidelity={jsFidelity} disabled={!session} onChange={setJsFidelity} />
         <span className="hint">
           {selection.count > 0 ? "Export = selected parts only" : "Export = whole page"}
         </span>
@@ -149,6 +153,7 @@ export default function App() {
           Exported {report.sizeKB} KB · {report.keptScripts} script(s) kept
         </div>
       )}
+      <JsFidelityReport report={report} />
 
       <main className="content">
         <PreviewFrame ref={iframeRef} previewUrl={session?.previewUrl ?? null} />

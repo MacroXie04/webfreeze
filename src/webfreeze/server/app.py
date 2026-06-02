@@ -15,7 +15,14 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from ..cache import ResourceCache
-from ..engine import FetchOpts, PruneOptions, prune, render_or_fetch
+from ..engine import (
+    FetchOpts,
+    FidelityReport,
+    PruneOptions,
+    prune,
+    render_or_fetch,
+    transform_js_fidelity,
+)
 from ..inliner import Inliner
 from ..utils import dumps_html
 from .preview import proxy_url, rewrite_for_preview, unrewrite_proxy_urls
@@ -183,20 +190,23 @@ def create_app(store: Optional[SessionStore] = None) -> FastAPI:
             )
             # P3/P4: jsFidelity transforms run here, after prune.
 
-        if req.options.jsFidelity == "off":
+        fidelity = req.options.jsFidelity
+        report = (
+            transform_js_fidelity(soup, fidelity)
+            if fidelity in ("css", "css+js")
+            else FidelityReport()
+        )
+
+        # Strip JS unless explicitly keeping it (css+js Tier-2 lands in P4).
+        if fidelity != "css+js":
             _neutralize_scripts(soup)
 
         Inliner(session.cache, inline_images=req.options.inlineImages).process_soup(
             soup, session.base_url
         )
         html = dumps_html(soup)
-        return {
-            "html": html,
-            "report": {
-                "sizeKB": len(html.encode("utf-8")) // 1024,
-                "keptScripts": len(soup.find_all("script")),
-                "widgets": [],
-            },
-        }
+        report.kept_scripts = len(soup.find_all("script"))
+        report.size_kb = len(html.encode("utf-8")) // 1024
+        return {"html": html, "report": report.to_dict()}
 
     return app
