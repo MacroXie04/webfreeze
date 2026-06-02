@@ -42,5 +42,15 @@ playwright-report/
 blob-report/
 playwright/.local-browsers
 
+# IDE
+.idea/
+.vscode/
+
+# Node
+node_modules/
+
+# Built frontend assets (produced by `npm --prefix web run build`)
+src/webfreeze/server/static/
+
 # OS
 .DS_Store
