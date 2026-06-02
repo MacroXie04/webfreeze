@@ -5,6 +5,7 @@ Endpoints: /api/health, /api/session, /api/session/{id}/preview, /proxy,
 wired; /api/freeze currently does whole-page (or grabbed-DOM) inlining only.
 """
 
+from pathlib import Path
 from typing import Optional
 from urllib.parse import urlsplit
 
@@ -12,6 +13,7 @@ from bs4 import BeautifulSoup
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from ..cache import ResourceCache
@@ -28,7 +30,12 @@ from ..engine import (
 from ..inliner import Inliner
 from ..utils import dumps_html, neutralize_scripts
 from .preview import proxy_url, rewrite_for_preview, unrewrite_proxy_urls
+from .security import assert_proxy_url_allowed
 from .session import Session, SessionStore
+
+# Built React assets (populated by `npm --prefix web run build`). Served at "/"
+# when present; in dev the Vite server serves the UI instead.
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 class SessionRequest(BaseModel):
@@ -138,10 +145,7 @@ def create_app(store: Optional[SessionStore] = None) -> FastAPI:
         session = store.get(sid)
         if session is None:
             raise HTTPException(status_code=404, detail="Unknown session")
-        # Minimal scheme guard; full SSRF allowlist (same-site + private-range
-        # blocking) lands in P5/HP5.
-        if not url.lower().startswith(("http://", "https://")):
-            raise HTTPException(status_code=400, detail="Unsupported URL scheme")
+        assert_proxy_url_allowed(url)  # HP5 SSRF guard
         try:
             mime, content = session.cache.fetch(url)
         except Exception as e:
@@ -203,5 +207,10 @@ def create_app(store: Optional[SessionStore] = None) -> FastAPI:
             embed_report_comment(soup, report)
             html = dumps_html(soup)
         return {"html": html, "report": report.to_dict()}
+
+    # Serve the built React UI at "/" if present (mounted LAST so /api and
+    # /proxy keep priority). In dev the Vite server serves the UI instead.
+    if STATIC_DIR.is_dir():
+        app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="ui")
 
     return app

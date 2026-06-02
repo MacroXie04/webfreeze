@@ -49,5 +49,8 @@ playwright/.local-browsers
 # Node
 node_modules/
 
+# Built frontend assets (produced by `npm --prefix web run build`)
+src/webfreeze/server/static/
+
 # OS
 .DS_Store

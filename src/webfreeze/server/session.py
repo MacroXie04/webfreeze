@@ -28,32 +28,54 @@ class Session:
 
 
 class SessionStore:
-    """Thread-safe ``sid -> Session`` map."""
+    """Thread-safe ``sid -> Session`` map with a TTL and a size cap.
 
-    def __init__(self) -> None:
+    Memory is bounded by evicting expired sessions and the oldest entries on
+    each insert (no background thread needed); ``get`` also drops expired ones.
+    """
+
+    def __init__(self, ttl_seconds: float = 1800, max_sessions: int = 50) -> None:
         self._sessions: Dict[str, Session] = {}
         self._lock = threading.Lock()
+        self.ttl_seconds = ttl_seconds
+        self.max_sessions = max_sessions
 
     def new_id(self) -> str:
         return uuid.uuid4().hex
 
     def save(self, sid: str, session: Session) -> None:
         with self._lock:
+            self._evict_locked(now=session.created_at)
             self._sessions[sid] = session
+            # Enforce the size cap by dropping the oldest sessions.
+            while len(self._sessions) > self.max_sessions:
+                oldest = min(self._sessions, key=lambda k: self._sessions[k].created_at)
+                del self._sessions[oldest]
 
     def get(self, sid: str) -> Optional[Session]:
         with self._lock:
-            return self._sessions.get(sid)
+            session = self._sessions.get(sid)
+            if session is None:
+                return None
+            if time.time() - session.created_at > self.ttl_seconds:
+                del self._sessions[sid]
+                return None
+            return session
 
-    def cleanup(self, ttl_seconds: float, now: Optional[float] = None) -> int:
-        """Evict sessions older than ttl_seconds. Returns the count removed. (P5)"""
+    def _evict_locked(self, now: float) -> int:
+        stale = [
+            sid for sid, s in self._sessions.items() if now - s.created_at > self.ttl_seconds
+        ]
+        for sid in stale:
+            del self._sessions[sid]
+        return len(stale)
+
+    def cleanup(self, ttl_seconds: Optional[float] = None, now: Optional[float] = None) -> int:
+        """Evict expired sessions. Returns the count removed."""
+        ttl = self.ttl_seconds if ttl_seconds is None else ttl_seconds
         now = time.time() if now is None else now
         with self._lock:
-            stale = [
-                sid
-                for sid, s in self._sessions.items()
-                if now - s.created_at > ttl_seconds
-            ]
+            stale = [sid for sid, s in self._sessions.items() if now - s.created_at > ttl]
             for sid in stale:
                 del self._sessions[sid]
         return len(stale)

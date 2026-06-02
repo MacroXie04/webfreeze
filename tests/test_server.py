@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from webfreeze.cache import ResourceCache
 from webfreeze.server import app as app_module
+from webfreeze.server import security
 from webfreeze.server.app import create_app
 from webfreeze.server.session import Session, SessionStore
 
@@ -70,7 +71,8 @@ def test_preview_unknown_session_404():
     assert client.get("/api/session/nope/preview").status_code == 404
 
 
-def test_proxy_streams_bytes():
+def test_proxy_streams_bytes(monkeypatch):
+    monkeypatch.setattr(security, "_resolve_ips", lambda host, port: ["93.184.216.34"])
     cache = MagicMock(spec=ResourceCache)
     cache.fetch.return_value = ("image/png", b"PNGDATA")
     store, sid = _store_with_session(cache)
@@ -81,7 +83,8 @@ def test_proxy_streams_bytes():
     assert resp.headers["content-type"].startswith("image/png")
 
 
-def test_proxy_css_is_rewritten():
+def test_proxy_css_is_rewritten(monkeypatch):
+    monkeypatch.setattr(security, "_resolve_ips", lambda host, port: ["93.184.216.34"])
     cache = MagicMock(spec=ResourceCache)
     cache.fetch.return_value = ("text/css", b"a{background:url('/img.png')}")
     store, sid = _store_with_session(cache)
@@ -90,6 +93,15 @@ def test_proxy_css_is_rewritten():
     assert resp.status_code == 200
     assert "/proxy?url=" in resp.text
     assert "img.png" in resp.text
+
+
+def test_proxy_blocks_ssrf_to_private_ip():
+    cache = MagicMock(spec=ResourceCache)
+    store, sid = _store_with_session(cache)
+    client = TestClient(create_app(store=store))
+    resp = client.get("/proxy", params={"url": "http://169.254.169.254/latest/", "sid": sid})
+    assert resp.status_code == 403
+    cache.fetch.assert_not_called()
 
 
 def test_proxy_unknown_session_404():

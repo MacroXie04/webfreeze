@@ -17,7 +17,8 @@ export default defineConfig({
     },
   },
   build: {
-    // P5 will point this at src/webfreeze/server/static and have FastAPI serve it.
-    outDir: "dist",
+    // Built into the Python package so `webfreeze-serve` can serve the UI.
+    outDir: "../src/webfreeze/server/static",
+    emptyOutDir: true,
   },
 });

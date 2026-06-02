@@ -33,6 +33,12 @@ webfreeze-serve = "webfreeze.server.cli:serve"
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"webfreeze.server" = ["picker.js", "static/**/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
