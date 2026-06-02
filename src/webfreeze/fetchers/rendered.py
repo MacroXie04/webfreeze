@@ -16,12 +16,12 @@ class RenderedFetcher(BaseFetcher):
         wait_for: Optional[str] = None,
         timeout: int = 30000,
         scroll: bool = True,
-        keep_js: bool = False,
+        script_policy: str = "strip_all",
     ):
         self.wait_for = wait_for
         self.timeout = timeout
         self.scroll = scroll
-        self.keep_js = keep_js
+        self.script_policy = script_policy
 
     def fetch(self, url: str) -> str:
         """Render the page and return the processed HTML."""
@@ -88,8 +88,12 @@ class RenderedFetcher(BaseFetcher):
                             else:
                                 soup.insert(0, style_tag)
 
-                # Neutralize scripts
-                if not self.keep_js:
+                # Neutralize scripts based on the configured policy.
+                #   strip_all    : remove all <script>, on* handlers, <noscript> (default)
+                #   keep_flagged : behaves like strip_all until P4 wires the marker
+                #   keep_all     : keep everything (interactive preview)
+                if self.script_policy in ("strip_all", "keep_flagged"):
+                    # TODO P4: honor data-wf-keep-script when script_policy == "keep_flagged"
                     log_info("Neutralizing scripts for static snapshot...")
                     for script in soup.find_all("script"):
                         script.decompose()
