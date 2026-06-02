@@ -125,3 +125,27 @@ def test_freeze_unknown_session_404():
     client = TestClient(create_app())
     resp = client.post("/api/freeze", json={"sessionId": "nope", "keep": "whole"})
     assert resp.status_code == 404
+
+
+def test_freeze_selection_prunes(monkeypatch):
+    # The session's original page is irrelevant for keep="selection" — the
+    # grabbed DOM is what gets pruned.
+    client, data = _client_with_session(monkeypatch, "<html><body></body></html>")
+    dom = (
+        "<!DOCTYPE html><html><head><title>T</title></head><body>"
+        "<div data-wf-keep='w1'>KEEP</div><div>DROP</div></body></html>"
+    )
+    resp = client.post(
+        "/api/freeze",
+        json={
+            "sessionId": data["sessionId"],
+            "keep": "selection",
+            "domHtml": dom,
+            "options": {"inlineImages": False, "jsFidelity": "off"},
+        },
+    )
+    assert resp.status_code == 200
+    html = resp.json()["html"]
+    assert "KEEP" in html
+    assert "DROP" not in html
+    assert "data-wf-keep" not in html

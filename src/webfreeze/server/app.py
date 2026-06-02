@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from ..cache import ResourceCache
-from ..engine import FetchOpts, render_or_fetch
+from ..engine import FetchOpts, PruneOptions, prune, render_or_fetch
 from ..inliner import Inliner
 from ..utils import dumps_html
 from .preview import proxy_url, rewrite_for_preview, unrewrite_proxy_urls
@@ -175,7 +175,13 @@ def create_app(store: Optional[SessionStore] = None) -> FastAPI:
         else:
             soup = BeautifulSoup(req.domHtml, "html.parser")
             unrewrite_proxy_urls(soup)
-            # P2: prune by data-wf-keep here. P3/P4: jsFidelity transforms.
+            prune(
+                soup,
+                PruneOptions(
+                    strip_unselected_siblings=req.options.stripUnselectedSiblings
+                ),
+            )
+            # P3/P4: jsFidelity transforms run here, after prune.
 
         if req.options.jsFidelity == "off":
             _neutralize_scripts(soup)

@@ -4,6 +4,7 @@ bootstrap. The reverse (`unrewrite_proxy_urls`) turns a grabbed preview DOM back
 into original absolute URLs before the final inline/export.
 """
 
+from pathlib import Path
 from typing import Callable
 from urllib.parse import parse_qs, quote, urlsplit
 
@@ -17,11 +18,9 @@ _URL_ATTRS = (("img", "src"), ("script", "src"), ("source", "src"), ("link", "hr
 
 _SKIP_PREFIXES = ("#", "data:", "javascript:", "mailto:", "tel:", "blob:")
 
-# Minimal picker bootstrap stub for P1 (full implementation lands in P2). It only
-# signals readiness; it carries data-wf-ui so it is stripped before export.
-PICKER_BOOTSTRAP = (
-    "(function(){try{parent.postMessage({type:'wf-ready'},'*');}catch(e){}})();"
-)
+# Picker bootstrap (HP2), shipped alongside this module. Read at import time;
+# P5 wires package-data so it ships in the wheel too.
+PICKER_BOOTSTRAP = (Path(__file__).parent / "picker.js").read_text(encoding="utf-8")
 
 
 def proxy_url(absolute_url: str, sid: str) -> str:
